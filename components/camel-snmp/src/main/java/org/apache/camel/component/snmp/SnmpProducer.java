@@ -16,24 +16,31 @@
  */
 package org.apache.camel.component.snmp;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Vector;
-import java.util.concurrent.TimeoutException;
-
 import org.apache.camel.Exchange;
 import org.apache.camel.support.DefaultProducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.snmp4j.AbstractTarget;
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.PDU;
+import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
 import org.snmp4j.TransportMapping;
+import org.snmp4j.UserTarget;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.MPv3;
+import org.snmp4j.security.AuthMD5;
+import org.snmp4j.security.AuthSHA;
+import org.snmp4j.security.Priv3DES;
+import org.snmp4j.security.PrivAES128;
+import org.snmp4j.security.PrivAES192;
+import org.snmp4j.security.PrivAES256;
+import org.snmp4j.security.PrivDES;
+import org.snmp4j.security.SecurityLevel;
 import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.USM;
+import org.snmp4j.security.UsmUser;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.GenericAddress;
 import org.snmp4j.smi.Integer32;
@@ -42,6 +49,11 @@ import org.snmp4j.smi.OctetString;
 import org.snmp4j.smi.VariableBinding;
 import org.snmp4j.transport.DefaultTcpTransportMapping;
 import org.snmp4j.transport.DefaultUdpTransportMapping;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Vector;
+import java.util.concurrent.TimeoutException;
 
 /**
  * A snmp producer
@@ -54,7 +66,7 @@ public class SnmpProducer extends DefaultProducer {
 
     private Address targetAddress;
     private USM usm;
-    private CommunityTarget target;
+    private AbstractTarget target;
     private SnmpActionType actionType;
     private PDU pdu;
 
@@ -71,18 +83,86 @@ public class SnmpProducer extends DefaultProducer {
         this.targetAddress = GenericAddress.parse(this.endpoint.getAddress());
         LOG.debug("targetAddress: {}", targetAddress);
 
-        this.usm = new USM(SecurityProtocols.getInstance(), new OctetString(MPv3.createLocalEngineID()), 0);
-        SecurityModels.getInstance().addSecurityModel(this.usm);
+        switch (this.endpoint.getSnmpVersion()) {
+            // The value 0 means SNMPv1,
+            case 0: {
 
-        // setting up target
-        this.target = new CommunityTarget();
-        this.target.setCommunity(new OctetString(endpoint.getSnmpCommunity()));
+            }
+            // 1 means SNMPv2c,
+            case 1: {
+                CommunityTarget requestTarget = new CommunityTarget();
+                requestTarget.setCommunity(new OctetString(endpoint.getSnmpCommunity()));
+                this.target = requestTarget;
+
+                this.pdu = new PDU();
+                break;
+            }
+            // and the value 3 means SNMPv3.
+            case 3: {
+                SecurityProtocols protocols = SecurityProtocols.getInstance();
+                protocols.addDefaultProtocols();
+                this.usm = new USM(protocols, new OctetString(MPv3.createLocalEngineID()), 0);
+
+                UserTarget userTarget = new UserTarget();
+
+                OID authenticationProtocol = null;
+                OID privacyProtocol = null;
+                switch (this.endpoint.getSecurityLevel()) {
+                    case 1: {
+                        userTarget.setSecurityLevel(SecurityLevel.NOAUTH_NOPRIV);
+                        break;
+                    }
+                    case 2: {
+                        if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("MD5"))
+                            authenticationProtocol = AuthMD5.ID;
+                        else if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("SHA1"))
+                            authenticationProtocol = AuthSHA.ID;
+                        userTarget.setSecurityLevel(SecurityLevel.AUTH_NOPRIV);
+                        break;
+                    }
+                    case 3: {
+                        if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("MD5"))
+                            authenticationProtocol = AuthMD5.ID;
+                        else if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("SHA1"))
+                            authenticationProtocol = AuthSHA.ID;
+
+                        if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("DES"))
+                            privacyProtocol = PrivDES.ID;
+                        else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("TRIDES"))
+                            privacyProtocol = Priv3DES.ID;
+                        else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES128"))
+                            privacyProtocol = PrivAES128.ID;
+                        else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES192"))
+                            privacyProtocol = PrivAES192.ID;
+                        else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES256"))
+                            privacyProtocol = PrivAES256.ID;
+
+                        userTarget.setSecurityLevel(SecurityLevel.AUTH_PRIV);
+                        break;
+                    }
+                }
+
+                OctetString userName = new OctetString(this.endpoint.getSecurityName());
+                OctetString userAuthPassword = new OctetString(this.endpoint.getAuthenticationPassphrase());
+                OctetString privacyPassphrase = new OctetString(this.endpoint.getPrivacyPassphrase());
+                UsmUser usmUser = new UsmUser(userName, authenticationProtocol, userAuthPassword, privacyProtocol, privacyPassphrase);
+
+                this.usm.addUser(usmUser);
+                SecurityModels.getInstance().addSecurityModel(this.usm);
+
+                userTarget.setSecurityName(userName);
+                this.target = userTarget;
+
+                this.pdu = new ScopedPDU();
+                break;
+            }
+        }
+
         this.target.setAddress(this.targetAddress);
         this.target.setRetries(this.endpoint.getRetries());
         this.target.setTimeout(this.endpoint.getTimeout());
         this.target.setVersion(this.endpoint.getSnmpVersion());
 
-        this.pdu = new PDU();
         // in here,only POLL do set the oids
         if (this.actionType == SnmpActionType.POLL) {
             for (OID oid : this.endpoint.getOids()) {
@@ -175,7 +255,7 @@ public class SnmpProducer extends DefaultProducer {
                 // snmp get
                 ResponseEvent responseEvent = snmp.send(this.pdu, this.target);
 
-                LOG.debug("Snmp: sended");
+                LOG.debug("Snmp: sent");
 
                 if (responseEvent.getResponse() != null) {
                     exchange.getIn().setBody(new SnmpMessage(getEndpoint().getCamelContext(), responseEvent.getResponse()));
