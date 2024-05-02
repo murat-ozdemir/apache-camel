@@ -90,6 +90,8 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
     private OIDList oids = new OIDList();
     @UriParam(label = "consumer", defaultValue = "false")
     private boolean treeList;
+    @UriParam(label = "producer", enums = "GET, SET")
+    private String operation;
 
     /**
      * creates a snmp endpoint
@@ -387,6 +389,14 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
      */
     public void setTreeList(boolean treeList) {
         this.treeList = treeList;
+    }
+
+    public String getOperation() {
+        return operation;
+    }
+
+    public void setOperation(String operation) {
+        this.operation = operation;
     }
 
     @Override

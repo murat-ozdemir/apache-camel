@@ -41,6 +41,7 @@ import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
+import org.snmp4j.smi.AbstractVariable;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.GenericAddress;
 import org.snmp4j.smi.Integer32;
@@ -252,26 +253,57 @@ public class SnmpProducer extends DefaultProducer {
                 }
                 exchange.getIn().setBody(smLst);
             } else {
-                // snmp get
-                ResponseEvent responseEvent = snmp.send(this.pdu, this.target);
+                if (endpoint.getOperation() != null && endpoint.getOperation().equals("set")) {
+                    OID oidToSet = new OID(exchange.getIn().getHeader("oid", String.class));
+                    String valueToSet = exchange.getIn().getHeader("value", String.class);
+                    Class<? extends AbstractVariable> valueType = exchange.getIn().getHeader("valueType", Class.class);
+                    AbstractVariable value = createVariable(valueType, valueToSet);
 
-                LOG.debug("Snmp: sent");
+                    pdu.clear();
+                    pdu.setType(PDU.SET);
+                    pdu.add(new VariableBinding(oidToSet, value));
 
-                if (responseEvent.getResponse() != null) {
-                    exchange.getIn().setBody(new SnmpMessage(getEndpoint().getCamelContext(), responseEvent.getResponse()));
+                    ResponseEvent response = snmp.send(pdu, target);
+                    LOG.debug("Snmp: snmp-set sent");
+                    handleResponse(response, exchange);
                 } else {
-                    throw new TimeoutException("SNMP Producer Timeout");
+                    ResponseEvent responseEvent = snmp.send(pdu, target);
+                    LOG.debug("Snmp: snmp-get sent");
+                    handleResponse(responseEvent, exchange);
                 }
             }
         } finally {
             try {
                 transport.close();
             } catch (Exception e) {
+                LOG.error("Error closing transport", e);
             }
             try {
                 snmp.close();
             } catch (Exception e) {
+                LOG.error("Error closing SNMP", e);
             }
         }
     } //end process
+
+    // Handles the response from the SNMP agent and sets the body of the exchange
+    private void handleResponse(ResponseEvent response, Exchange exchange) throws TimeoutException {
+        if (response != null && response.getResponse() != null) {
+            exchange.getIn().setBody(new SnmpMessage(getEndpoint().getCamelContext(), response.getResponse()));
+        } else {
+            throw new TimeoutException("SNMP Producer Timeout" + (response != null ? " on SET" : ""));
+        }
+    }
+
+    // Creates an AbstractVariable based on the value type and value to set
+    private AbstractVariable createVariable(Class<? extends AbstractVariable> valueType, String valueToSet) {
+        switch (valueType.getSimpleName()) {
+            case "Integer32":
+                return new Integer32(Integer.parseInt(valueToSet));
+            case "OctetString":
+                return new OctetString(new String(valueToSet));
+            default:
+                throw new IllegalArgumentException("Unknown value type: " + valueType.getSimpleName());
+        }
+    }
 }

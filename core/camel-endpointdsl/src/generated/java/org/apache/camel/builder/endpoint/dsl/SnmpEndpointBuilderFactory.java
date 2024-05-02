@@ -1919,7 +1919,8 @@ public interface SnmpEndpointBuilderFactory {
     enum SnmpActionType {
         TRAP,
         POLL,
-        GET_NEXT;
+        GET_NEXT,
+        SET;
     }
 
     public interface SnmpBuilders {

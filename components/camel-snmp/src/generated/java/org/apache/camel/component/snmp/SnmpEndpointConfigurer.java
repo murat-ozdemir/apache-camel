@@ -85,6 +85,7 @@ public class SnmpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "type": target.setType(property(camelContext, org.apache.camel.component.snmp.SnmpActionType.class, value)); return true;
         case "usefixeddelay":
         case "useFixedDelay": target.setUseFixedDelay(property(camelContext, boolean.class, value)); return true;
+        case "operation": target.setOperation(property(camelContext, String.class, value)); return true;
         default: return false;
         }
     }
