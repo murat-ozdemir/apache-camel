@@ -16,6 +16,11 @@
  */
 package org.apache.camel.component.snmp;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Vector;
+import java.util.concurrent.TimeoutException;
+
 import org.apache.camel.Exchange;
 import org.apache.camel.support.DefaultProducer;
 import org.slf4j.Logger;
@@ -51,11 +56,6 @@ import org.snmp4j.smi.VariableBinding;
 import org.snmp4j.transport.DefaultTcpTransportMapping;
 import org.snmp4j.transport.DefaultUdpTransportMapping;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Vector;
-import java.util.concurrent.TimeoutException;
-
 /**
  * A snmp producer
  */
@@ -87,7 +87,12 @@ public class SnmpProducer extends DefaultProducer {
         switch (this.endpoint.getSnmpVersion()) {
             // The value 0 means SNMPv1,
             case 0: {
+                CommunityTarget requestTarget = new CommunityTarget();
+                requestTarget.setCommunity(new OctetString(endpoint.getSnmpCommunity()));
+                this.target = requestTarget;
 
+                this.pdu = new PDU();
+                break;
             }
             // 1 means SNMPv2c,
             case 1: {
@@ -114,32 +119,37 @@ public class SnmpProducer extends DefaultProducer {
                         break;
                     }
                     case 2: {
-                        if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("MD5"))
+                        if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("MD5")) {
                             authenticationProtocol = AuthMD5.ID;
-                        else if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("SHA1"))
+                        } else if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("SHA1")) {
                             authenticationProtocol = AuthSHA.ID;
+                        }
                         userTarget.setSecurityLevel(SecurityLevel.AUTH_NOPRIV);
                         break;
                     }
                     case 3: {
-                        if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("MD5"))
+                        if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("MD5")) {
                             authenticationProtocol = AuthMD5.ID;
-                        else if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("SHA1"))
+                        } else if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("SHA1")) {
                             authenticationProtocol = AuthSHA.ID;
+                        }
 
-                        if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("DES"))
+                        if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("DES")) {
                             privacyProtocol = PrivDES.ID;
-                        else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("TRIDES"))
+                        } else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("TRIDES")) {
                             privacyProtocol = Priv3DES.ID;
-                        else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES128"))
+                        }  else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES128")) {
                             privacyProtocol = PrivAES128.ID;
-                        else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES192"))
+                        } else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES192")) {
                             privacyProtocol = PrivAES192.ID;
-                        else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES256"))
+                        } else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES256")) {
                             privacyProtocol = PrivAES256.ID;
-
+                        }
                         userTarget.setSecurityLevel(SecurityLevel.AUTH_PRIV);
                         break;
+                    }
+                    default: {
+                        // NOP
                     }
                 }
 
@@ -156,6 +166,9 @@ public class SnmpProducer extends DefaultProducer {
 
                 this.pdu = new ScopedPDU();
                 break;
+            }
+            default: {
+                // NOP
             }
         }
 
@@ -301,7 +314,7 @@ public class SnmpProducer extends DefaultProducer {
             case "Integer32":
                 return new Integer32(Integer.parseInt(valueToSet));
             case "OctetString":
-                return new OctetString(new String(valueToSet));
+                return new OctetString( valueToSet );
             default:
                 throw new IllegalArgumentException("Unknown value type: " + valueType.getSimpleName());
         }
