@@ -290,13 +290,17 @@ public class SnmpProducer extends DefaultProducer {
             }
         } finally {
             try {
-                transport.close();
-            } catch (Exception e) {
+				if ( transport != null ) {
+					transport.close();
+				}
+			} catch (Exception e) {
                 LOG.error("Error closing transport", e);
             }
             try {
-                snmp.close();
-            } catch (Exception e) {
+				if ( snmp != null ) {
+					snmp.close();
+				}
+			} catch (Exception e) {
                 LOG.error("Error closing SNMP", e);
             }
         }
