@@ -44,6 +44,7 @@ public class SnmpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "lazystartproducer":
         case "lazyStartProducer": target.setLazyStartProducer(property(camelContext, boolean.class, value)); return true;
         case "oids": target.setOids(property(camelContext, org.apache.camel.component.snmp.OIDList.class, value)); return true;
+        case "operation": target.setOperation(property(camelContext, java.lang.String.class, value)); return true;
         case "pollstrategy":
         case "pollStrategy": target.setPollStrategy(property(camelContext, org.apache.camel.spi.PollingConsumerPollStrategy.class, value)); return true;
         case "privacypassphrase":
@@ -85,7 +86,6 @@ public class SnmpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "type": target.setType(property(camelContext, org.apache.camel.component.snmp.SnmpActionType.class, value)); return true;
         case "usefixeddelay":
         case "useFixedDelay": target.setUseFixedDelay(property(camelContext, boolean.class, value)); return true;
-        case "operation": target.setOperation(property(camelContext, String.class, value)); return true;
         default: return false;
         }
     }
@@ -116,6 +116,7 @@ public class SnmpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "lazystartproducer":
         case "lazyStartProducer": return boolean.class;
         case "oids": return org.apache.camel.component.snmp.OIDList.class;
+        case "operation": return java.lang.String.class;
         case "pollstrategy":
         case "pollStrategy": return org.apache.camel.spi.PollingConsumerPollStrategy.class;
         case "privacypassphrase":
@@ -188,6 +189,7 @@ public class SnmpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "lazystartproducer":
         case "lazyStartProducer": return target.isLazyStartProducer();
         case "oids": return target.getOids();
+        case "operation": return target.getOperation();
         case "pollstrategy":
         case "pollStrategy": return target.getPollStrategy();
         case "privacypassphrase":

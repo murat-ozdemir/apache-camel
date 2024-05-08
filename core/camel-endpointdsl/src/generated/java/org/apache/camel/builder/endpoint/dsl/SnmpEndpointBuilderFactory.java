@@ -1390,6 +1390,20 @@ public interface SnmpEndpointBuilderFactory {
             return this;
         }
         /**
+         * Set operation.
+         * 
+         * The option is a: &lt;code&gt;java.lang.String&lt;/code&gt; type.
+         * 
+         * Group: producer
+         * 
+         * @param operation the value to set
+         * @return the dsl builder
+         */
+        default SnmpEndpointProducerBuilder operation(String operation) {
+            doSetProperty("operation", operation);
+            return this;
+        }
+        /**
          * The authentication passphrase. If not null, authenticationProtocol
          * must also be not null. RFC3414 11.2 requires passphrases to have a
          * minimum length of 8 bytes. If the length of authenticationPassphrase
@@ -1919,8 +1933,7 @@ public interface SnmpEndpointBuilderFactory {
     enum SnmpActionType {
         TRAP,
         POLL,
-        GET_NEXT,
-        SET;
+        GET_NEXT;
     }
 
     public interface SnmpBuilders {

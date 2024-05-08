@@ -391,10 +391,16 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
         this.treeList = treeList;
     }
 
+    /**
+     * Get operation
+     */
     public String getOperation() {
         return operation;
     }
 
+    /**
+     * Set operation
+     */
     public void setOperation(String operation) {
         this.operation = operation;
     }
