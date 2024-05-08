@@ -392,14 +392,22 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
     }
 
     /**
-     * Get operation
+     * Retrieves the operation type of the endpoint.
+     * This operation type determines how the endpoint will interact with SNMP,
+     * either performing a "set" to modify a value on the device or a "get" to retrieve a value.
+     *
+     * @return the operation type, typically "set" or "get"
      */
     public String getOperation() {
         return operation;
     }
 
     /**
-     * Set operation
+     * Sets the operation type for the endpoint.
+     * Specifying the operation type is crucial for defining the behavior of SNMP interactions,
+     * such as updating device information ("set") or querying device status ("get").
+     *
+     * @param operation the operation type to set, should be either "set" or "get"
      */
     public void setOperation(String operation) {
         this.operation = operation;
