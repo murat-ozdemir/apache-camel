@@ -266,16 +266,19 @@ public class SnmpProducer extends DefaultProducer {
                 }
                 exchange.getIn().setBody(smLst);
             } else {
-                if (endpoint.getOperation() != null && endpoint.getOperation().equals("set")) {
-                    OID oidToSet = new OID(exchange.getIn().getHeader("oid", String.class));
-                    String valueToSet = exchange.getIn().getHeader("value", String.class);
-                    Class<? extends AbstractVariable> valueType = exchange.getIn().getHeader("valueType", Class.class);
-                    AbstractVariable value = createVariable(valueType, valueToSet);
+                if (this.endpoint.getOperation() != null && this.endpoint.getOperation().equals("set")) {
+                    String value = this.endpoint.getValue();
+                    String valueTypeClassName = this.endpoint.getValueType();
+                    Class <? extends AbstractVariable> valueTypeClazz = Class.forName( valueTypeClassName ).asSubclass( AbstractVariable.class );
+                    OIDList oidList = this.endpoint.getOids();
+                    AbstractVariable abstractVariable = createVariable(valueTypeClazz, value);
 
                     pdu.clear();
                     pdu.setType(PDU.SET);
-                    pdu.add(new VariableBinding(oidToSet, value));
-
+                    for (OID oid : oidList) {
+                        VariableBinding vb = new VariableBinding(oid, abstractVariable);
+                        pdu.add(vb);
+                    }
                     ResponseEvent response = snmp.send(pdu, target);
                     LOG.debug("Snmp: snmp-set sent");
                     handleResponse(response, exchange);
@@ -310,13 +313,13 @@ public class SnmpProducer extends DefaultProducer {
 
     // Creates an AbstractVariable based on the value type and value to set
     private AbstractVariable createVariable(Class<? extends AbstractVariable> valueType, String valueToSet) {
-        switch (valueType.getSimpleName()) {
-            case "Integer32":
-                return new Integer32(Integer.parseInt(valueToSet));
-            case "OctetString":
-                return new OctetString( valueToSet );
-            default:
-                throw new IllegalArgumentException("Unknown value type: " + valueType.getSimpleName());
+        if (valueType.equals(Integer32.class)) {
+            return new Integer32(Integer.parseInt(valueToSet));
+        } else if (valueType.equals(OctetString.class)) {
+            return new OctetString(valueToSet);
+        } else if (valueType.equals(OID.class)) {
+            return new OID(valueToSet);
         }
+        throw new IllegalArgumentException("Unsupported SNMP type: "+valueType.getName());
     }
 }

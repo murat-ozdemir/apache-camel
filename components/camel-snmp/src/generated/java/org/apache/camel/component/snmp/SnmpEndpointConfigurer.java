@@ -86,6 +86,9 @@ public class SnmpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "type": target.setType(property(camelContext, org.apache.camel.component.snmp.SnmpActionType.class, value)); return true;
         case "usefixeddelay":
         case "useFixedDelay": target.setUseFixedDelay(property(camelContext, boolean.class, value)); return true;
+        case "value": target.setValue(property(camelContext, java.lang.String.class, value)); return true;
+        case "valuetype":
+        case "valueType": target.setValueType(property(camelContext, java.lang.String.class, value)); return true;
         default: return false;
         }
     }
@@ -158,6 +161,9 @@ public class SnmpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "type": return org.apache.camel.component.snmp.SnmpActionType.class;
         case "usefixeddelay":
         case "useFixedDelay": return boolean.class;
+        case "value": return java.lang.String.class;
+        case "valuetype":
+        case "valueType": return java.lang.String.class;
         default: return null;
         }
     }
@@ -231,6 +237,9 @@ public class SnmpEndpointConfigurer extends PropertyConfigurerSupport implements
         case "type": return target.getType();
         case "usefixeddelay":
         case "useFixedDelay": return target.isUseFixedDelay();
+        case "value": return target.getValue();
+        case "valuetype":
+        case "valueType": return target.getValueType();
         default: return null;
         }
     }

@@ -33,6 +33,8 @@ import org.slf4j.LoggerFactory;
 import org.snmp4j.PDU;
 import org.snmp4j.mp.SnmpConstants;
 import org.snmp4j.security.SecurityLevel;
+import org.snmp4j.smi.AbstractVariable;
+import org.snmp4j.smi.OID;
 
 /**
  * Receive traps and poll SNMP (Simple Network Management Protocol) capable devices.
@@ -92,7 +94,10 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
     private boolean treeList;
     @UriParam(label = "producer", enums = "GET, SET")
     private String operation;
-
+    @UriParam(label = "producer")
+    private String value;
+    @UriParam(label = "producer", enums = "OctetString, Integer32")
+    private String valueType;
     /**
      * creates a snmp endpoint
      *
@@ -411,6 +416,47 @@ public class SnmpEndpoint extends DefaultPollingEndpoint {
      */
     public void setOperation(String operation) {
         this.operation = operation;
+    }
+
+
+    /**
+     * Retrieves the value to be used in the SNMP operation.
+     * The value is typically used in "set" operations to define the new value to be set on the device.
+     *
+     * @return the value to be used in the operation
+     */
+    public String getValue() {
+        return value;
+    }
+
+    /**
+     * Sets the value to be used in the SNMP operation.
+     * The value is typically used in "set" operations to define the new value to be set on the device.
+     *
+     * @param value the value to be used in the operation
+     */
+    public void setValue(String value) {
+        this.value = value;
+    }
+
+    /**
+     * Retrieves the value type to be used in the SNMP operation.
+     * The value type is typically used in "set" operations to define the type of the value to be set on the device.
+     *
+     * @return the value type to be used in the operation
+     */
+    public String getValueType() {
+        return valueType;
+    }
+
+    /**
+     * Sets the value type to be used in the SNMP operation.
+     * The value type is typically used in "set" operations to define the type of the value to be set on the device.
+     *
+     * @param valueType the value type to be used in the operation
+     */
+    public void setValueType(String valueType) {
+        this.valueType = valueType;
     }
 
     @Override

@@ -20,7 +20,7 @@ public class SnmpEndpointUriFactory extends org.apache.camel.support.component.E
     private static final Set<String> PROPERTY_NAMES;
     private static final Set<String> SECRET_PROPERTY_NAMES;
     static {
-        Set<String> props = new HashSet<>(39);
+        Set<String> props = new HashSet<>(41);
         props.add("backoffMultiplier");
         props.add("privacyPassphrase");
         props.add("securityName");
@@ -36,11 +36,13 @@ public class SnmpEndpointUriFactory extends org.apache.camel.support.component.E
         props.add("useFixedDelay");
         props.add("runLoggingLevel");
         props.add("backoffErrorThreshold");
+        props.add("valueType");
         props.add("host");
         props.add("snmpContextName");
         props.add("greedy");
         props.add("scheduledExecutorService");
         props.add("oids");
+        props.add("value");
         props.add("repeatCount");
         props.add("timeUnit");
         props.add("snmpCommunity");

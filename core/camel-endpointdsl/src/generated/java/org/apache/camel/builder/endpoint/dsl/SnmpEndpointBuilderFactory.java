@@ -1390,7 +1390,9 @@ public interface SnmpEndpointBuilderFactory {
             return this;
         }
         /**
-         * Set operation.
+         * Sets the operation type for the endpoint. Specifying the operation
+         * type is crucial for defining the behavior of SNMP interactions, such
+         * as updating device information (set) or querying device status (get).
          * 
          * The option is a: &lt;code&gt;java.lang.String&lt;/code&gt; type.
          * 
@@ -1401,6 +1403,38 @@ public interface SnmpEndpointBuilderFactory {
          */
         default SnmpEndpointProducerBuilder operation(String operation) {
             doSetProperty("operation", operation);
+            return this;
+        }
+        /**
+         * Sets the value to be used in the SNMP operation. The value is
+         * typically used in set operations to define the new value to be set on
+         * the device.
+         * 
+         * The option is a: &lt;code&gt;java.lang.String&lt;/code&gt; type.
+         * 
+         * Group: producer
+         * 
+         * @param value the value to set
+         * @return the dsl builder
+         */
+        default SnmpEndpointProducerBuilder value(String value) {
+            doSetProperty("value", value);
+            return this;
+        }
+        /**
+         * Sets the value type to be used in the SNMP operation. The value type
+         * is typically used in set operations to define the type of the value
+         * to be set on the device.
+         * 
+         * The option is a: &lt;code&gt;java.lang.String&lt;/code&gt; type.
+         * 
+         * Group: producer
+         * 
+         * @param valueType the value to set
+         * @return the dsl builder
+         */
+        default SnmpEndpointProducerBuilder valueType(String valueType) {
+            doSetProperty("valueType", valueType);
             return this;
         }
         /**
