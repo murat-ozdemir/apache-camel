@@ -42,6 +42,7 @@ import org.snmp4j.security.PrivAES192;
 import org.snmp4j.security.PrivAES256;
 import org.snmp4j.security.PrivDES;
 import org.snmp4j.security.SecurityLevel;
+import org.snmp4j.security.SecurityModel;
 import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.USM;
@@ -66,7 +67,7 @@ public class SnmpProducer extends DefaultProducer {
     private SnmpEndpoint endpoint;
 
     private Address targetAddress;
-    private USM usm;
+    //private USM usm;
     private AbstractTarget target;
     private SnmpActionType actionType;
     private PDU pdu;
@@ -107,8 +108,10 @@ public class SnmpProducer extends DefaultProducer {
             case 3: {
                 SecurityProtocols protocols = SecurityProtocols.getInstance();
                 protocols.addDefaultProtocols();
-                this.usm = new USM(protocols, new OctetString(MPv3.createLocalEngineID()), 0);
-
+                USM usm = (USM) SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
+                if (usm == null) {
+                    usm = new USM(protocols, new OctetString(MPv3.createLocalEngineID()), 0);
+                }
                 UserTarget userTarget = new UserTarget();
 
                 OID authenticationProtocol = null;
@@ -157,9 +160,12 @@ public class SnmpProducer extends DefaultProducer {
                 OctetString userAuthPassword = new OctetString(this.endpoint.getAuthenticationPassphrase());
                 OctetString privacyPassphrase = new OctetString(this.endpoint.getPrivacyPassphrase());
                 UsmUser usmUser = new UsmUser(userName, authenticationProtocol, userAuthPassword, privacyProtocol, privacyPassphrase);
+                usm.addUser(usmUser);
 
-                this.usm.addUser(usmUser);
-                SecurityModels.getInstance().addSecurityModel(this.usm);
+                SecurityModel sm = SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
+                if ( sm == null ) {
+                    SecurityModels.getInstance().addSecurityModel(usm);
+                }
 
                 userTarget.setSecurityName(userName);
                 this.target = userTarget;
@@ -199,10 +205,14 @@ public class SnmpProducer extends DefaultProducer {
         super.doStop();
 
         try {
-            SecurityModels.getInstance().removeSecurityModel(new Integer32(this.usm.getID()));
+            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_ANY));
+            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_SNMPv1));
+            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_SNMPv2c));
+            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
+            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_TSM));
         } finally {
             this.targetAddress = null;
-            this.usm = null;
+            //this.usm = null;
             this.target = null;
             this.pdu = null;
         }
@@ -288,19 +298,22 @@ public class SnmpProducer extends DefaultProducer {
                     handleResponse(responseEvent, exchange);
                 }
             }
+        } catch ( Exception e ) {
+            LOG.error( "Error", e );
+            throw e;
         } finally {
             try {
-				if ( transport != null ) {
-					transport.close();
-				}
-			} catch (Exception e) {
+                if ( transport != null ) {
+                    transport.close();
+                }
+            } catch (Exception e) {
                 LOG.error("Error closing transport", e);
             }
             try {
-				if ( snmp != null ) {
-					snmp.close();
-				}
-			} catch (Exception e) {
+                if ( snmp != null ) {
+                    snmp.close();
+                }
+            } catch (Exception e) {
                 LOG.error("Error closing SNMP", e);
             }
         }
