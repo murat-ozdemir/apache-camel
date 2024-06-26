@@ -16,6 +16,7 @@
  */
 package org.apache.camel.component.snmp;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
@@ -238,94 +239,115 @@ public class SnmpProducer extends DefaultProducer {
 
             snmp = new Snmp(transport);
 
-            LOG.debug("Snmp: i am sending");
+            LOG.debug("Snmp: i am sending {}", this.target.getAddress());
 
             snmp.listen();
 
             if (this.actionType == SnmpActionType.GET_NEXT) {
-                // snmp walk
-                List<SnmpMessage> smLst = new ArrayList<>();
-                for (OID oid : this.endpoint.getOids()) {
-                    this.pdu.clear();
-                    this.pdu.add(new VariableBinding(oid));
-
-                    boolean matched = true;
-                    while (matched) {
-                        ResponseEvent responseEvent = snmp.send(this.pdu, this.target);
-                        if (responseEvent == null || responseEvent.getResponse() == null) {
-                            break;
-                        }
-                        PDU response = responseEvent.getResponse();
-                        String nextOid = null;
-                        Vector<? extends VariableBinding> variableBindings = response.getVariableBindings();
-                        for (int i = 0; i < variableBindings.size(); i++) {
-                            VariableBinding variableBinding = variableBindings.elementAt(i);
-                            nextOid = variableBinding.getOid().toDottedString();
-                            if (!nextOid.startsWith(oid.toDottedString())) {
-                                matched = false;
-                                break;
-                            }
-                        }
-                        if (!matched) {
-                            break;
-                        }
-                        this.pdu.clear();
-                        pdu.add(new VariableBinding(new OID(nextOid)));
-                        smLst.add(new SnmpMessage(getEndpoint().getCamelContext(), response));
-                    }
-                }
-                exchange.getIn().setBody(smLst);
+                performSnmpWalk( exchange, snmp );
             } else {
                 if (this.endpoint.getOperation() != null && this.endpoint.getOperation().equals("set")) {
-                    String value = this.endpoint.getValue();
-                    String valueTypeClassName = this.endpoint.getValueType();
-                    Class <? extends AbstractVariable> valueTypeClazz = Class.forName( valueTypeClassName ).asSubclass( AbstractVariable.class );
-                    OIDList oidList = this.endpoint.getOids();
-                    AbstractVariable abstractVariable = createVariable(valueTypeClazz, value);
-
-                    pdu.clear();
-                    pdu.setType(PDU.SET);
-                    for (OID oid : oidList) {
-                        VariableBinding vb = new VariableBinding(oid, abstractVariable);
-                        pdu.add(vb);
-                    }
-                    ResponseEvent response = snmp.send(pdu, target);
-                    LOG.debug("Snmp: snmp-set sent");
-                    handleResponse(response, exchange);
+                    performSnmpSet( exchange, snmp );
                 } else {
-                    ResponseEvent responseEvent = snmp.send(pdu, target);
-                    LOG.debug("Snmp: snmp-get sent");
-                    handleResponse(responseEvent, exchange);
+                    performSnmpGet( exchange, snmp );
                 }
             }
+        } catch ( TimeoutException te ) {
+            LOG.error( "Request Timeout, no response: {}", this.target.getAddress() );
         } catch ( Exception e ) {
-            LOG.error( "Error", e );
+            //LOG.error( "Error", e );
             throw e;
         } finally {
-            try {
-                if ( transport != null ) {
-                    transport.close();
-                }
-            } catch (Exception e) {
-                LOG.error("Error closing transport", e);
-            }
-            try {
-                if ( snmp != null ) {
-                    snmp.close();
-                }
-            } catch (Exception e) {
-                LOG.error("Error closing SNMP", e);
-            }
+            closeResources( transport, snmp );
         }
     } //end process
+
+    private void closeResources ( TransportMapping < ? extends Address > transport, Snmp snmp ) {
+        try {
+            if ( transport != null ) {
+                LOG.debug( "Closing transport {} {}", transport, this.target.getAddress() );
+                transport.close();
+            }
+        } catch (Exception e) {
+            LOG.error("Error closing transport", e);
+        }
+        try {
+            if ( snmp != null ) {
+                LOG.debug( "Closing snmp {} {}", snmp, this.target.getAddress() );
+                snmp.close();
+            }
+        } catch (Exception e) {
+            LOG.error("Error closing SNMP", e);
+        }
+    }
+
+    private void performSnmpGet ( Exchange exchange, Snmp snmp ) throws IOException, TimeoutException {
+        ResponseEvent responseEvent = snmp.send(pdu, target);
+        LOG.debug("Snmp: snmp-get sent {}", this.target.getAddress());
+        handleResponse(responseEvent, exchange );
+    }
+
+    private void performSnmpSet ( Exchange exchange, Snmp snmp ) throws ClassNotFoundException, IOException, TimeoutException {
+        String value = this.endpoint.getValue();
+        String valueTypeClassName = this.endpoint.getValueType();
+        Class <? extends AbstractVariable> valueTypeClazz = Class.forName( valueTypeClassName ).asSubclass( AbstractVariable.class );
+        OIDList oidList = this.endpoint.getOids();
+        AbstractVariable abstractVariable = createVariable(valueTypeClazz, value);
+
+        pdu.clear();
+        pdu.setType(PDU.SET);
+        for (OID oid : oidList) {
+            VariableBinding vb = new VariableBinding(oid, abstractVariable);
+            pdu.add(vb);
+        }
+        ResponseEvent response = snmp.send(pdu, target);
+        LOG.debug("Snmp: snmp-set sent {}", this.target.getAddress());
+        handleResponse(response, exchange );
+    }
 
     // Handles the response from the SNMP agent and sets the body of the exchange
     private void handleResponse(ResponseEvent response, Exchange exchange) throws TimeoutException {
         if (response != null && response.getResponse() != null) {
             exchange.getIn().setBody(new SnmpMessage(getEndpoint().getCamelContext(), response.getResponse()));
         } else {
-            throw new TimeoutException("SNMP Producer Timeout" + (response != null ? " on SET" : ""));
+            throw new TimeoutException("SNMP Producer Timeout" + (response != null ? " on " + this.endpoint.getOperation() : ""));
         }
+    }
+
+    private void performSnmpWalk ( Exchange exchange, Snmp snmp ) throws IOException {
+        // snmp walk
+        List<SnmpMessage> smLst = new ArrayList<>();
+        for (OID oid : this.endpoint.getOids()) {
+            this.pdu.clear();
+            this.pdu.add(new VariableBinding(oid));
+
+            boolean matched = true;
+            while (matched) {
+                ResponseEvent responseEvent = snmp.send(this.pdu, this.target);
+                LOG.debug("Snmp: snmp-get-next sent {}", this.target.getAddress());
+                if (responseEvent == null || responseEvent.getResponse() == null) {
+                    break;
+                }
+                PDU response = responseEvent.getResponse();
+                String nextOid = null;
+                Vector<? extends VariableBinding> variableBindings = response.getVariableBindings();
+                for (int i = 0; i < variableBindings.size(); i++) {
+                    VariableBinding variableBinding = variableBindings.elementAt(i);
+                    nextOid = variableBinding.getOid().toDottedString();
+                    if (!nextOid.startsWith(oid.toDottedString())) {
+                        matched = false;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    break;
+                }
+                this.pdu.clear();
+                pdu.add(new VariableBinding(new OID(nextOid)));
+                smLst.add(new SnmpMessage(getEndpoint().getCamelContext(), response));
+            }
+        }
+        exchange.getIn().setBody(smLst);
     }
 
     // Creates an AbstractVariable based on the value type and value to set
