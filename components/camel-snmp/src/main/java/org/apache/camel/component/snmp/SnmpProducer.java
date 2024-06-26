@@ -253,7 +253,7 @@ public class SnmpProducer extends DefaultProducer {
                 }
             }
         } catch ( TimeoutException te ) {
-            LOG.error( "Request Timeout, no response: {}", this.target.getAddress() );
+            LOG.error( "Request Timeout, no response: {} {}", this.target.getAddress(), te.getMessage() );
         } catch ( Exception e ) {
             //LOG.error( "Error", e );
             throw e;
