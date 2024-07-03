@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.snmp4j.AbstractTarget;
 import org.snmp4j.CommunityTarget;
+import org.snmp4j.MessageException;
 import org.snmp4j.PDU;
 import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
@@ -48,6 +49,7 @@ import org.snmp4j.security.SecurityModels;
 import org.snmp4j.security.SecurityProtocols;
 import org.snmp4j.security.USM;
 import org.snmp4j.security.UsmUser;
+import org.snmp4j.security.UsmUserEntry;
 import org.snmp4j.smi.AbstractVariable;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.GenericAddress;
@@ -64,6 +66,8 @@ import org.snmp4j.transport.DefaultUdpTransportMapping;
 public class SnmpProducer extends DefaultProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(SnmpProducer.class);
+    private static final Object USM_LOCK = new Object();
+    private static final Object USER_LOCK = new Object();
 
     private SnmpEndpoint endpoint;
 
@@ -107,23 +111,27 @@ public class SnmpProducer extends DefaultProducer {
             }
             // and the value 3 means SNMPv3.
             case 3: {
-                SecurityProtocols protocols = SecurityProtocols.getInstance();
-                protocols.addDefaultProtocols();
-                USM usm = (USM) SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
-                if (usm == null) {
-                    usm = new USM(protocols, new OctetString(MPv3.createLocalEngineID()), 0);
+                USM usm = null;
+                synchronized ( USM_LOCK ) {
+                    usm = (USM) SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
+                    if (usm == null) {
+                        usm = new USM(SecurityProtocols.getInstance().addDefaultProtocols(), new OctetString(MPv3.createLocalEngineID()), 0);
+                        usm.setEngineDiscoveryEnabled(true);
+                        LOG.debug( "USM with model {} not found, adding one {}", SecurityModel.SECURITY_MODEL_USM, usm );
+                        SecurityModels.getInstance().addSecurityModel(usm);
+                    }
                 }
                 UserTarget userTarget = new UserTarget();
 
                 OID authenticationProtocol = null;
                 OID privacyProtocol = null;
-                switch (this.endpoint.getSecurityLevel()) {
+                switch (this.endpoint.getSecurityLevel()){
                     case 1: {
-                        userTarget.setSecurityLevel(SecurityLevel.NOAUTH_NOPRIV);
+                        userTarget.setSecurityLevel( SecurityLevel.NOAUTH_NOPRIV );
                         break;
                     }
                     case 2: {
-                        if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("MD5")) {
+                        if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("MD5")){
                             authenticationProtocol = AuthMD5.ID;
                         } else if (this.endpoint.getAuthenticationProtocol().equalsIgnoreCase("SHA1")) {
                             authenticationProtocol = AuthSHA.ID;
@@ -142,7 +150,7 @@ public class SnmpProducer extends DefaultProducer {
                             privacyProtocol = PrivDES.ID;
                         } else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("TRIDES")) {
                             privacyProtocol = Priv3DES.ID;
-                        }  else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES128")) {
+                        } else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES128")) {
                             privacyProtocol = PrivAES128.ID;
                         } else if (this.endpoint.getPrivacyProtocol().equalsIgnoreCase("AES192")) {
                             privacyProtocol = PrivAES192.ID;
@@ -156,22 +164,29 @@ public class SnmpProducer extends DefaultProducer {
                         // NOP
                     }
                 }
-
                 OctetString userName = new OctetString(this.endpoint.getSecurityName());
                 OctetString userAuthPassword = new OctetString(this.endpoint.getAuthenticationPassphrase());
                 OctetString privacyPassphrase = new OctetString(this.endpoint.getPrivacyPassphrase());
                 UsmUser usmUser = new UsmUser(userName, authenticationProtocol, userAuthPassword, privacyProtocol, privacyPassphrase);
-                usm.addUser(usmUser);
-
-                SecurityModel sm = SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
-                if ( sm == null ) {
-                    SecurityModels.getInstance().addSecurityModel(usm);
+                synchronized ( USER_LOCK ) {
+                    if ( usm.getUserTable().getUser(userName) == null ) {
+                        LOG.debug( "User not found, adding user {} into USM {}", usmUser, usm );
+                        usm.addUser(usmUser);
+                    }
                 }
 
                 userTarget.setSecurityName(userName);
                 this.target = userTarget;
 
-                this.pdu = new ScopedPDU();
+                ScopedPDU scopedPDU = new ScopedPDU();
+                if (this.endpoint.getSnmpContextEngineId() != null) {
+                    scopedPDU.setContextEngineID(new OctetString(this.endpoint.getSnmpContextEngineId()));
+                }
+                if (this.endpoint.getSnmpContextName() != null) {
+                    scopedPDU.setContextName(new OctetString(this.endpoint.getSnmpContextName()));
+                }
+                this.pdu = scopedPDU;
+                //this.pdu = new ScopedPDU();
                 break;
             }
             default: {
@@ -183,6 +198,8 @@ public class SnmpProducer extends DefaultProducer {
         this.target.setRetries(this.endpoint.getRetries());
         this.target.setTimeout(this.endpoint.getTimeout());
         this.target.setVersion(this.endpoint.getSnmpVersion());
+
+        LOG.debug("user/request target: {}", this.target);
 
         // in here,only POLL do set the oids
         if (this.actionType == SnmpActionType.POLL) {
@@ -206,11 +223,21 @@ public class SnmpProducer extends DefaultProducer {
         super.doStop();
 
         try {
-            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_ANY));
-            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_SNMPv1));
-            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_SNMPv2c));
-            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
-            SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_TSM));
+            //SecurityModels.getInstance().removeSecurityModel(new Integer32(this.usm.getID()));
+            //SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_ANY));
+            //SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_SNMPv1));
+            //SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_SNMPv2c));
+            //SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
+            //SecurityModels.getInstance().removeSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_TSM));
+            USM usm = null;
+            if (this.endpoint.getSnmpVersion() == 3) {
+                usm = (USM) SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
+                OctetString securityName = this.target.getSecurityName();
+                UsmUserEntry user = usm.getUserTable().getUser(securityName);
+                if (user != null) {
+                    usm.getUserTable().removeUser(user.getEngineID(), user.getUserName());
+                }
+            }
         } finally {
             this.targetAddress = null;
             //this.usm = null;
@@ -238,11 +265,17 @@ public class SnmpProducer extends DefaultProducer {
             }
 
             snmp = new Snmp(transport);
-
-            LOG.debug("Snmp: i am sending {}", this.target.getAddress());
-
             snmp.listen();
 
+            USM usm = (USM) SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
+            OctetString contextEngineID = ((ScopedPDU) this.pdu).getContextEngineID();
+            if (contextEngineID!= null && contextEngineID.toByteArray().length > 1) {
+                // in order to prevent 1.3.6.1.6.3.15.1.1.2 (usmStatsNotInTimeWindows) response
+                usm.getTimeTable().removeEntry(contextEngineID);
+                LOG.debug( "time cache deleted for {}", contextEngineID );
+            }
+
+            LOG.debug("Sending user/request target: {}", this.target);
             if (this.actionType == SnmpActionType.GET_NEXT) {
                 performSnmpWalk( exchange, snmp );
             } else {
@@ -306,11 +339,17 @@ public class SnmpProducer extends DefaultProducer {
     }
 
     // Handles the response from the SNMP agent and sets the body of the exchange
-    private void handleResponse(ResponseEvent response, Exchange exchange) throws TimeoutException {
+    private void handleResponse(ResponseEvent response, Exchange exchange) throws TimeoutException, MessageException {
         if (response != null && response.getResponse() != null) {
             exchange.getIn().setBody(new SnmpMessage(getEndpoint().getCamelContext(), response.getResponse()));
+            if (this.pdu instanceof ScopedPDU) {
+                ((ScopedPDU) this.pdu).setContextEngineID(((ScopedPDU) response.getResponse()).getContextEngineID());
+            }
+        } else if ( response != null && response.getError() != null ) {
+            LOG.error("Error received from peer " + this.target.getAddress(), response.getError());
+            throw new MessageException( response.getError().getMessage() );
         } else {
-            throw new TimeoutException("SNMP Producer Timeout" + (response != null ? " on " + this.endpoint.getOperation() : ""));
+            throw new TimeoutException("SNMP Producer Timeout" + (this.endpoint.getOperation() != null ? " on " + this.endpoint.getOperation() : ""));
         }
     }
 
