@@ -267,12 +267,14 @@ public class SnmpProducer extends DefaultProducer {
             snmp = new Snmp(transport);
             snmp.listen();
 
-            USM usm = (USM) SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
-            OctetString contextEngineID = ((ScopedPDU) this.pdu).getContextEngineID();
-            if (contextEngineID!= null && contextEngineID.toByteArray().length > 1) {
-                // in order to prevent 1.3.6.1.6.3.15.1.1.2 (usmStatsNotInTimeWindows) response
-                usm.getTimeTable().removeEntry(contextEngineID);
-                LOG.debug( "time cache deleted for {}", contextEngineID );
+            if (this.endpoint.getSnmpVersion() == 3 && this.target instanceof UserTarget) {
+                USM usm = (USM) SecurityModels.getInstance().getSecurityModel(new Integer32(SecurityModel.SECURITY_MODEL_USM));
+                OctetString contextEngineID = ((ScopedPDU) this.pdu).getContextEngineID();
+                if (contextEngineID!= null && contextEngineID.toByteArray().length > 1) {
+                    // in order to prevent 1.3.6.1.6.3.15.1.1.2 (usmStatsNotInTimeWindows) response
+                    usm.getTimeTable().removeEntry(contextEngineID);
+                    LOG.debug( "time cache deleted for {}", contextEngineID );
+                }
             }
 
             LOG.debug("Sending user/request target: {}", this.target);
